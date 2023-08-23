@@ -26,10 +26,8 @@ $page['tab'] = 'user_activity';
 include(PHPWG_ROOT_PATH.'admin/include/user_tabs.inc.php');
 
 
-if (isset($_GET['type']) && 'download_logs' == $_GET['type']) {
-  
-  global $conf;
-
+if (isset($_GET['type']) && 'download_logs' == $_GET['type'])
+{
   $output_lines = array();
 
   $query = '
@@ -103,7 +101,9 @@ SELECT
     performed_by, 
     COUNT(*) as counter 
   FROM '.ACTIVITY_TABLE.'
-  group by performed_by;';
+  WHERE object != \'system\'
+  GROUP BY performed_by
+;';
 
 $nb_lines_for_user = query2array($query, 'performed_by', 'counter');
 
@@ -111,10 +111,10 @@ if (count($nb_lines_for_user) > 0)
 {
   $query = '
   SELECT 
-      id, 
-      username 
-    FROM piwigo_users 
-    WHERE id IN ('.implode(',', array_keys($nb_lines_for_user)).');';
+      '.$conf['user_fields']['id'].' AS id, 
+      '.$conf['user_fields']['username'].' AS username 
+    FROM '.USERS_TABLE.' 
+    WHERE '.$conf['user_fields']['id'].' IN ('.implode(',', array_keys($nb_lines_for_user)).');';
 }
 
 $username_of = query2array($query, 'id', 'username');
@@ -135,7 +135,7 @@ $template->assign('ulist', $filterable_users);
 
 $query = '
 SELECT COUNT(*)
-  FROM '.USER_INFOS_TABLE.'
+  FROM '.USERS_TABLE.'
 ;';
 
 list($nb_users) = pwg_db_fetch_row(pwg_query($query));

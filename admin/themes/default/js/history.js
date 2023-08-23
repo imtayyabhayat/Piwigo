@@ -3,6 +3,16 @@ $(document).ready(() => {
   activateLineOptions();
   checkFilters();
 
+  if (current_param.ip != "") {
+    addIpFilter(current_param.ip);
+  }
+  if (current_param.image_id != "") {
+    addImageFilter(current_param.image_id);
+  }
+  if (current_param.user_id != "-1") {
+    addUserFilter(filter_user_name);
+  }
+
   $(".elem-type-select").on("change", function (e) {
     console.log($(".elem-type-select option:selected").attr("value"));
 
@@ -114,8 +124,8 @@ function fillSummaryResult(summary) {
 
   if ((summary.GUESTS.split(" ")[0] != "0")) {
     $(".summary-guests .summary-data").addClass("icon-plus-circled").on("click", function () {
-      if (current_param.user == "-1") {
-        current_param.user = guest_id;
+      if (current_param.user_id == "-1") {
+        current_param.user_id = guest_id;
         addGuestFilter(str_guest);
         fillHistoryResult(current_param);
       }
@@ -155,8 +165,8 @@ function fillSummaryResult(summary) {
       new_user_item.data("user-id", id_of[key]);
   
       new_user_item.on("click", function () {
-        if (current_param.user != id_of[key]) {
-          current_param.user = $(this).data("user-id");
+        if (current_param.user_id != id_of[key]) {
+          current_param.user_id = $(this).data("user-id");
           addUserFilter(key)
           fillHistoryResult(current_param);
         }
@@ -227,6 +237,12 @@ function fillHistoryResult(ajaxParam) {
     activateLineOptions();
     $(".loading").addClass("hide");
     updatePagination(maxPage);
+    $('.tiptip').tipTip({
+      delay: 0,
+      fadeIn: 200,
+      fadeOut: 200,
+      edgeOffset: 3
+    });
   })
 }
 
@@ -272,9 +288,9 @@ function lineConstructor(line, id, imageDisplay) {
   newLine.find(".user-name").html(line.USERNAME + '<i class="add-filter icon-plus-circled"></i>');
 
   newLine.find(".user-name").attr("id", line.USERID);
-  if (current_param.user == "-1") {
+  if (current_param.user_id == "-1") {
     newLine.find(".user-name").on("click", function ()  {
-      current_param.user = $(this).attr('id') + "";
+      current_param.user_id = $(this).attr('id') + "";
       current_param.pageNumber = 0;
       addUserFilter($(this).html());
       fillHistoryResult(current_param);
@@ -301,7 +317,18 @@ function lineConstructor(line, id, imageDisplay) {
       fillHistoryResult(current_param);
     });
   }
-  newLine.find(".edit-img").attr("href", line.EDIT_IMAGE)
+
+  if (line.EDIT_IMAGE != "") {
+    newLine.find(".edit-img").attr("href", line.EDIT_IMAGE);
+  } else {
+    newLine.find(".edit-img")
+      .attr("href", "#")
+      .addClass("notClickable tiptip")
+      .attr('title', str_no_longer_exist_photo)
+      .on("click", (e) => {
+      e.preventDefault();
+    });
+  }
 
   switch (line.SECTION) {
     case "tags":
@@ -321,52 +348,72 @@ function lineConstructor(line, id, imageDisplay) {
         detail_str += tag + ", ";
       });
       detail_str = detail_str.slice(0, -2)
-      newLine.find(".detail-item-2").html(detail_str);
-      newLine.find(".detail-item-2").attr("title", detail_str).removeClass("hide");
+      newLine.find(".detail-item-1").html(detail_str);
+      newLine.find(".detail-item-1").attr("title", detail_str).removeClass("hide").addClass('icon-tags');;
       break;
     
     case "most_visited":
       newLine.find(".type-name").html(str_most_visited);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_most_visited).addClass('icon-fire');
+      newLine.find(".type-id").hide();
       break;
     case "best_rated":
       newLine.find(".type-name").html(str_best_rated);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_best_rated).addClass("icon-star");
+      newLine.find(".type-id").hide();
       break;
     case "list":
       newLine.find(".type-name").html(str_list);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_list).addClass('icon-dice-solid');
+      newLine.find(".type-id").hide();
       break;
     case "favorites":
       newLine.find(".type-name").html(str_favorites);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_favorites).addClass('icon-heart');
+      newLine.find(".type-id").hide();
       break;
     case "recent_cats":
       newLine.find(".type-name").html(str_recent_cats);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_recent_cats).addClass('icon-clock');
+      newLine.find(".type-id").hide();
       break;
     case "recent_pics":
       newLine.find(".type-name").html(str_recent_pics);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_recent_pics).addClass('icon-clock');
+      newLine.find(".type-id").hide();
       break;
     case "categories":
       newLine.find(".type-name").html(line.CATEGORY);
+      newLine.find(".detail-item-1").html(line.CATEGORY).addClass("icon-folder-open tiptip").attr("title", line.FULL_CATEGORY_PATH);
       if (line.IMAGE == "") {
-        newLine.find(".type-id").remove();
+        newLine.find(".type-id").hide();
       }
       break;
     case "memories-1-year-ago":
       newLine.find(".type-name").html(str_memories);
-      newLine.find(".type-id").remove();
+      newLine.find(".detail-item-1").html(str_memories).addClass('icon-clock');
+      newLine.find(".type-id").hide();
+    break;
+    case "contact":
+      newLine.find(".type-icon i").addClass("line-icon icon-mail-1 icon-yellow");
+      newLine.find(".type-name").html(str_contact_form);
+      newLine.find(".detail-item-1").html(str_contact_form);
+      newLine.find(".type-id").hide();
     break;
     default:
-      break;
+      newLine.find(".type-icon i").addClass("line-icon icon-help-puzzle icon-grey");
+      newLine.find(".type-name").html(line.SECTION);
+      newLine.find(".type-id").hide();
+    break;
   }
 
   if (line.IMAGE != "") {
     newLine.find(".type-name").html(line.IMAGENAME);
     newLine.find(".type-icon").html(line.IMAGE);
-    newLine.find(".type-id").html("#" + line.IMAGEID)
+    newLine.find(".type-id").html("#" + line.IMAGEID);
+    newLine.find(".type-icon").attr("href", line.EDIT_IMAGE).removeClass("no-img")
+    newLine.find(".type-icon img").attr("title", str_edit_img).addClass("tiptip")
+    newLine.find(".type-id").show();
   } else {
     newLine.find(".type-icon .icon-file-image").removeClass("icon-file-image");
     newLine.find(".toggle-img-option").hide();
@@ -375,11 +422,11 @@ function lineConstructor(line, id, imageDisplay) {
       var lineIconClass = icons[sections.indexOf(line.SECTION)];
       newLine.find(".type-icon i").addClass(lineIconClass)
     } else {
-      console.log("ERROR ON THIS : " + line.SECTION);
+      console.log("Unhandled section : " + line.SECTION);
     }
   }
 
-  newLine.find(".detail-item-1").html(line.SECTION).removeClass("hide");
+  newLine.find(".detail-item-1").removeClass("hide");
   if (line.TYPE == "high") {
     newLine.find(".detail-item-1").html(str_dwld).addClass("icon-blue").removeClass("detail-item-1").removeClass("hide");
     newLine.find(".date-dwld-icon").addClass("icon-blue icon-floppy")
@@ -403,7 +450,7 @@ function addUserFilter(username) {
   newFilter.find(".remove-filter").on("click", function () {
     $(this).parent().remove();
 
-    current_param.user = "-1";
+    current_param.user_id = "-1";
     current_param.pageNumber = 0;
     fillHistoryResult(current_param);
     checkFilters();
@@ -425,7 +472,7 @@ function addGuestFilter(username) {
   newFilter.find(".remove-filter").on("click", function () {
     $(this).parent().remove();
 
-    current_param.user = "-1";
+    current_param.user_id = "-1";
     current_param.pageNumber = 0;
     fillHistoryResult(current_param);
     checkFilters();

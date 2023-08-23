@@ -161,7 +161,6 @@ function add_uploaded_file($source_filepath, $original_filename=null, $categorie
   }
 
   $file_path = null;
-  $is_tiff = false;
 
   if (isset($image_id))
   {
@@ -217,11 +216,6 @@ SELECT
     elseif (IMAGETYPE_GIF == $type)
     {
       $file_path.= 'gif';
-    }
-    elseif (IMAGETYPE_TIFF_MM == $type or IMAGETYPE_TIFF_II == $type)
-    {
-      $is_tiff = true;
-      $file_path.= 'tif';
     }
     elseif (IMAGETYPE_JPEG == $type)
     {
@@ -543,6 +537,55 @@ function upload_file_pdf($representative_ext, $file_path)
   return $representative_ext;
 }
 
+add_event_handler('upload_file', 'upload_file_heic');
+function upload_file_heic($representative_ext, $file_path)
+{
+  global $logger, $conf;
+
+  $logger->info(__FUNCTION__.', $file_path = '.$file_path.', $representative_ext = '.$representative_ext);
+
+  if (isset($representative_ext))
+  {
+    return $representative_ext;
+  }
+
+  if (pwg_image::get_library() != 'ext_imagick')
+  {
+    return $representative_ext;
+  }
+
+  if (!in_array(strtolower(get_extension($file_path)), array('heic')))
+  {
+    return $representative_ext;
+  }
+
+  $ext = 'jpg';
+
+  // move the uploaded file to pwg_representative sub-directory
+  $representative_file_path = original_to_representative($file_path, $ext);
+  prepare_directory(dirname($representative_file_path));
+
+  list($w,$h) = get_optimal_dimensions_for_representative();
+
+  $exec = $conf['ext_imagick_dir'].'convert';
+  $exec.= ' -sampling-factor 4:2:0 -quality 85 -interlace JPEG -colorspace sRGB -auto-orient +repage -strip -resize "'.$w.'x'.$h.'>"';
+  $exec.= ' "'.realpath($file_path).'"';
+  $exec.= ' "'.$representative_file_path.'"';
+  $exec.= ' 2>&1';
+
+  $logger->info(__FUNCTION__.', exec = '.$exec);
+
+  @exec($exec, $returnarray);
+
+  // Return the extension (if successful) or false (if failed)
+  if (file_exists($representative_file_path))
+  {
+    $representative_ext = $ext;
+  }
+
+  return $representative_ext;
+}
+
 add_event_handler('upload_file', 'upload_file_tiff');
 function upload_file_tiff($representative_ext, $file_path)
 {
@@ -685,6 +728,117 @@ function upload_file_video($representative_ext, $file_path)
   if (!file_exists($representative_file_path))
   {
     return null;
+  }
+
+  return $representative_ext;
+}
+
+add_event_handler('upload_file', 'upload_file_psd');
+function upload_file_psd($representative_ext, $file_path)
+{
+  global $logger, $conf;
+
+  $logger->info(__FUNCTION__.', $file_path = '.$file_path.', $representative_ext = '.$representative_ext);
+
+  if (isset($representative_ext))
+  {
+    return $representative_ext;
+  }
+
+  if (pwg_image::get_library() != 'ext_imagick')
+  {
+    return $representative_ext;
+  }
+
+  if (!in_array(strtolower(get_extension($file_path)), array('psd')))
+  {
+    return $representative_ext;
+  }
+
+  // move the uploaded file to pwg_representative sub-directory
+  $representative_file_path = dirname($file_path).'/pwg_representative/';
+  $representative_file_path.= get_filename_wo_extension(basename($file_path)).'.';
+
+  $representative_ext = 'png';
+  $representative_file_path.= $representative_ext;
+
+  prepare_directory(dirname($representative_file_path));
+
+  $exec = $conf['ext_imagick_dir'].'convert';
+
+  $exec .= ' "'.realpath($file_path).'"';
+
+  $dest = pathinfo($representative_file_path);
+  $exec .= ' "'.realpath($dest['dirname']).'/'.$dest['basename'].'"';
+
+  $exec .= ' 2>&1';
+  $logger->info(__FUNCTION__.', exec = '.$exec);
+  @exec($exec, $returnarray);
+
+  // sometimes ImageMagick creates file-0.png + file-1.png + file-2.png...
+  // It seems we can't avoid it.
+  $representative_file_abspath = realpath($dest['dirname']).'/'.$dest['basename'];
+  if (!file_exists($representative_file_abspath))
+  {
+    $first_file_abspath = preg_replace(
+      '/\.'.$representative_ext.'$/',
+      '-0.'.$representative_ext,
+      $representative_file_abspath
+      );
+
+    if (file_exists($first_file_abspath))
+    {
+      rename($first_file_abspath, $representative_file_abspath);
+    }
+  }
+
+  return get_extension($representative_file_abspath);
+}
+
+add_event_handler('upload_file', 'upload_file_eps');
+function upload_file_eps($representative_ext, $file_path)
+{
+  global $logger, $conf;
+
+  $logger->info(__FUNCTION__.', $file_path = '.$file_path.', $representative_ext = '.$representative_ext);
+
+  if (isset($representative_ext))
+  {
+    return $representative_ext;
+  }
+
+  if (pwg_image::get_library() != 'ext_imagick')
+  {
+    return $representative_ext;
+  }
+
+  if (!in_array(strtolower(get_extension($file_path)), array('eps')))
+  {
+    return $representative_ext;
+  }
+
+  // if the representative is "jpg", the derivatives are ugly. With "png" it's fine.
+  $ext = 'png';
+
+  // move the uploaded file to pwg_representative sub-directory
+  $representative_file_path = original_to_representative($file_path, $ext);
+  prepare_directory(dirname($representative_file_path));
+
+  // convert -density 300 image.eps -resize 2048x2048 image.png
+
+  $exec = $conf['ext_imagick_dir'].'convert';
+  $exec.= ' -density 300';
+  $exec.= ' "'.realpath($file_path).'"';
+  $exec.= ' -resize 2048x2048';
+  $exec.= ' "'.$representative_file_path.'"';
+  $exec.= ' 2>&1';
+  $logger->info(__FUNCTION__.', $exec = '.$exec);
+  @exec($exec, $returnarray);
+
+  // Return the extension (if successful) or false (if failed)
+  if (file_exists($representative_file_path))
+  {
+    $representative_ext = $ext;
   }
 
   return $representative_ext;
@@ -864,5 +1018,41 @@ function ready_for_upload_message()
   }
 
   return null;
+}
+
+/**
+ * Return the optimized resize dimensions for a representative, based on maximum display size.
+ * There is no need to generate a 4000x3000 JPEG from a 4000x3000 HEIC if XXL size is only 1600x1200.
+ * 
+ * @since 14
+ *
+ * @return array(width, height)
+ */
+function get_optimal_dimensions_for_representative()
+{
+  global $conf;
+
+  $enabled = ImageStdParams::get_defined_type_map();
+  $disabled = @unserialize(@$conf['disabled_derivatives']);
+  if ($disabled === false)
+  {
+    $disabled = array();
+  }
+
+  $w = $h = 2000; // safe default values
+
+  foreach(ImageStdParams::get_all_types() as $type)
+  {
+    $params = $enabled[$type] ?? @$disabled[$type];
+
+    if ($params)
+    {
+      list($w, $h) = $params->sizing->ideal_size;
+    }
+  }
+
+  $margin_coef = 1.5;
+
+  return array($w*$margin_coef, $h*$margin_coef);
 }
 ?>

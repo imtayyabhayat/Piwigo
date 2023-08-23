@@ -13,6 +13,13 @@ if (!defined('PHPWG_ROOT_PATH'))
 
 include_once(PHPWG_ROOT_PATH.'admin/include/functions.php');
 
+$query = '
+SELECT
+    COUNT(*)
+  FROM '.CATEGORIES_TABLE.'
+;';
+list($albums_counter) = pwg_db_fetch_row(pwg_query($query));
+
 // +-----------------------------------------------------------------------+
 // | Check Access and exit when user status is not ok                      |
 // +-----------------------------------------------------------------------+
@@ -49,7 +56,8 @@ if (isset($_POST['simpleAutoOrder']) || isset($_POST['recursiveAutoOrder']) )
   {
     die('Invalid sort order');
   }
-
+  check_input_parameter('id', $_POST, false, '/^-?\d+$/');
+  
   $query = '
 SELECT id
   FROM '.CATEGORIES_TABLE.'
@@ -163,6 +171,13 @@ foreach ($allAlbum as $album)
   $the_place['cat'] = $album;
 }
 
+// WARNING $user['forbidden_categories'] is 100% reliable only on gallery side because
+// it's a cache variable. On administration side, if you modify public/private status
+// of an album or change permissions, this variable is reset and not recalculated until
+// you open the gallery. As this situation doesn't occur each time you use the
+// administration, it's quite reliable but not as much as on gallery side.
+$is_forbidden = array_fill_keys(@explode(',', $user['forbidden_categories']), 1);
+
 //Make an ordered tree
 function cmpCat($a, $b) 
 {
@@ -175,49 +190,9 @@ function cmpCat($a, $b)
 
 function assocToOrderedTree($assocT) 
 {
+  global $nb_photos_in, $nb_sub_photos, $is_forbidden;
+
   $orderedTree = array();
-
-  $query = '
-SELECT
-    category_id,
-    COUNT(*) AS nb_photos
-  FROM '.IMAGE_CATEGORY_TABLE.'
-  GROUP BY category_id
-;';
-
-  $nb_photos_in = query2array($query, 'category_id', 'nb_photos');
-  
-  $query = '
-SELECT
-    id,
-    uppercats
-  FROM '.CATEGORIES_TABLE.'
-;';
-  $all_categories = query2array($query, 'id', 'uppercats');
-  $subcats_of = array();
-
-  foreach ($all_categories as $id => $uppercats)
-  {
-    foreach (array_slice(explode(',', $uppercats), 0, -1) as $uppercat_id)
-    {
-      @$subcats_of[$uppercat_id][] = $id;
-    }
-  }
-
-  $nb_sub_photos = array();
-  foreach ($subcats_of as $cat_id => $subcat_ids)
-  {
-    $nb_photos = 0;
-    foreach ($subcat_ids as $id)
-    {
-      if (isset($nb_photos_in[$id]))
-      {
-        $nb_photos+= $nb_photos_in[$id];
-      }
-    }
-
-    $nb_sub_photos[$cat_id] = $nb_photos;
-  }
 
   foreach($assocT as $cat) 
   {
@@ -228,7 +203,7 @@ SELECT
     $orderedCat['id'] = $cat['cat']['id'];
     $orderedCat['nb_images'] = isset($nb_photos_in[$cat['cat']['id']]) ? $nb_photos_in[$cat['cat']['id']] : 0;
     $orderedCat['last_updates'] = $cat['cat']['lastmodified'];
-    $orderedCat['has_not_access'] = !cat_admin_access($cat['cat']['id']);
+    $orderedCat['has_not_access'] = isset($is_forbidden[$cat['cat']['id']]);
     $orderedCat['nb_sub_photos'] = isset($nb_sub_photos[$cat['cat']['id']]) ? $nb_sub_photos[$cat['cat']['id']] : 0;
     if (isset($cat['children'])) 
     {
@@ -242,12 +217,56 @@ SELECT
   return $orderedTree;
 }
 
+$query = '
+SELECT
+    category_id,
+    COUNT(*) AS nb_photos
+  FROM '.IMAGE_CATEGORY_TABLE.'
+  GROUP BY category_id
+;';
+
+$nb_photos_in = query2array($query, 'category_id', 'nb_photos');
+
+$query = '
+SELECT
+    id,
+    uppercats
+  FROM '.CATEGORIES_TABLE.'
+;';
+$all_categories = query2array($query, 'id', 'uppercats');
+
+$subcats_of = array();
+
+foreach ($all_categories as $id => $uppercats)
+{
+  foreach (array_slice(explode(',', $uppercats), 0, -1) as $uppercat_id)
+  {
+    @$subcats_of[$uppercat_id][] = $id;
+  }
+}
+
+$nb_sub_photos = array();
+foreach ($subcats_of as $cat_id => $subcat_ids)
+{
+  $nb_photos = 0;
+  foreach ($subcat_ids as $id)
+  {
+    if (isset($nb_photos_in[$id]))
+    {
+      $nb_photos+= $nb_photos_in[$id];
+    }
+  }
+
+  $nb_sub_photos[$cat_id] = $nb_photos;
+}
+
 $template->assign(
   array(
     'album_data' => assocToOrderedTree($associatedTree),
     'PWG_TOKEN' => get_pwg_token(),
     'nb_albums' => count($allAlbum),
     'ADMIN_PAGE_TITLE' => l10n('Albums'),
+    'light_album_manager' => ($albums_counter > $conf['light_album_manager_threshold']) ? 1 : 0,
   )
 );
 

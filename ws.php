@@ -157,6 +157,7 @@ function ws_addDefaultMethods( $arr )
           'default' => IMG_THUMB,
           'info' => implode(',', array_keys(ImageStdParams::get_defined_type_map()))
           ),
+        'search' => array('default' => null),
         ),
       'Returns a list of categories.',
       $ws_functions_root . 'pwg.categories.php'
@@ -847,10 +848,21 @@ function ws_addDefaultMethods( $arr )
       'ws_categories_setInfo',
       array(
         'category_id' =>  array('type'=>WS_TYPE_ID),
-        'name' =>         array('default'=>null),
-        'comment' =>      array('default'=>null),
+        'name' =>         array('default'=>null,
+                                'flags'=>WS_PARAM_OPTIONAL,),
+        'comment' =>      array('default'=>null,
+                                'flags'=>WS_PARAM_OPTIONAL,),
         'status' =>       array('default'=>null,
+                                'flags'=>WS_PARAM_OPTIONAL,
                                 'info'=>'public, private'),
+        'visible' =>       array('default'=>null,
+                                'flags'=>WS_PARAM_OPTIONAL),
+        'commentable' =>  array('default'=>null,
+                                'flags'=>WS_PARAM_OPTIONAL,
+                                'info'=>'Boolean, effective if configuration variable activate_comments is set to true'),
+        'apply_commentable_to_subalbums' =>  array('default'=>null,
+                                'flags'=>WS_PARAM_OPTIONAL,
+                                'info'=>'If true, set commentable to all sub album'),
         ),
       'Changes properties of an album.',
       $ws_functions_root . 'pwg.categories.php',
@@ -1091,6 +1103,8 @@ function ws_addDefaultMethods( $arr )
                               'type'=>WS_TYPE_INT|WS_TYPE_POSITIVE),
         'order' =>      array('default'=>'id',
                               'info'=>'id, username, level, email'),
+        'exclude' =>    array('flags'=>WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+                              'type'=>WS_TYPE_ID),
         'display' =>    array('default'=>'basics',
                               'info'=>'Comma saparated list (see method description)'),
         ),
@@ -1301,6 +1315,7 @@ enabled_high, registration_date, registration_date_string, registration_date_sin
       'cat_id' => array('type'=>WS_TYPE_ID, 'default'=>null),
       'section' => array('default'=>null),
       'tags_string' => array('default'=>null),
+      'is_download' => array('default'=>false, 'type'=>WS_TYPE_BOOL),
       ),
     'Log visit in history',
     $ws_functions_root . 'pwg.php'
@@ -1309,9 +1324,101 @@ enabled_high, registration_date, registration_date_string, registration_date_sin
   $service->addMethod(
       'pwg.history.search',
       'ws_history_search',
-      null,
-      'Gives an history of who has visited the galery and the actions done in it. Receives parameter.',
+      array(
+        'start' => array(
+          'default' => null
+        ),
+        'end' => array(
+          'default' => null
+        ),
+        'types' => array(
+          'flags'=>WS_PARAM_FORCE_ARRAY,
+          'default' => array(
+            'none',
+            'picture',
+            'high',
+            'other',
+          )
+        ),
+        'user_id' => array(
+          'default' => -1,
+        ),
+        'image_id' => array(
+          'default' => null,
+          'type' => WS_TYPE_ID,
+        ),
+        'filename' => array(
+          'default' => null
+        ),
+        'ip' => array(
+          'default' => null
+        ),
+        'display_thumbnail' => array(
+          'default' => 'display_thumbnail_classic'
+        ),
+        'pageNumber' => array(
+          'default' => null,
+          'type' => WS_TYPE_INT|WS_TYPE_POSITIVE,
+        ),
+      ),
+      'Gives an history of who has visited the galery and the actions done in it. Receives parameter.
+      <br> <strong>Types </strong> can be : \'none\', \'picture\', \'high\', \'other\' 
+      <br> <strong>Date format</strong> is yyyy-mm-dd
+      <br> <strong>display_thumbnail</strong> can be : \'no_display_thumbnail\', \'display_thumbnail_classic\', \'display_thumbnail_hoverbox\'',
       $ws_functions_root . 'pwg.php'
+    );
+
+    $service->addMethod(
+      'pwg.images.filteredSearch.update',
+      'ws_images_filteredSearch_update',
+      array(
+        'search_id' => array(),
+        'allwords' => array(
+          'flags' => WS_PARAM_OPTIONAL,
+          'info' => 'query to search by words',
+        ),
+        'allwords_mode' => array(
+          'flags' => WS_PARAM_OPTIONAL,
+          'info' => 'AND (by default) | OR',
+        ),
+        'allwords_fields' => array(
+          'flags' => WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+          'info' => 'values among [name, comment, tags, file, cat-title, cat-desc]',
+        ),
+        'tags' => array(
+          'flags' => WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+          'type' => WS_TYPE_ID,
+        ),
+        'tags_mode' => array(
+          'flags' => WS_PARAM_OPTIONAL,
+          'info' => 'AND (by default) | OR',
+        ),
+        'categories' => array(
+          'flags' => WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+          'type' => WS_TYPE_ID,
+        ),
+        'categories_withsubs' => array(
+          'flags' => WS_PARAM_OPTIONAL,
+          'type' => WS_TYPE_BOOL,
+          'info' => 'false, by default',
+        ),
+        'authors' => array(
+          'flags' => WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+        ),
+        'added_by' => array(
+          'flags' => WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+          'type' => WS_TYPE_ID,
+        ),
+        'filetypes' => array(
+          'flags' => WS_PARAM_OPTIONAL|WS_PARAM_FORCE_ARRAY,
+        ),
+        'date_posted' => array(
+          'flags' => WS_PARAM_OPTIONAL,
+          'info' => 'files posted within 7 days (7d) or 30 days (30d) or 6 months (6m) or 1 year (1y). Value among 7d|30d|6m|1y',
+        ),
+      ),
+      '',
+      $ws_functions_root . 'pwg.images.php'
     );
 }
 

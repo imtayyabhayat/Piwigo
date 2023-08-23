@@ -11,6 +11,8 @@ var month = dateObj.getUTCMonth() + 1; //months from 1-12
 var day = dateObj.getUTCDate();
 var year = dateObj.getUTCFullYear();
 
+var filter_user_name = "{$USER_NAME}";
+
 if (month < 10) month = "0" + month;
 if (day < 10) day = "0" + day;
 
@@ -24,10 +26,10 @@ var current_param = {
     2: "high",
     3: "other"
   },
-  user: "-1",
-  image_id: "",
+  user_id: {$USER_ID},
+  image_id: {if isset($IMAGE_ID)}"{$IMAGE_ID}"{else}""{/if},
   filename: "",
-  ip: "",
+  ip: {if isset($IP)}"{$IP}"{else}""{/if},
   display_thumbnail: "display_thumbnail_classic",
   pageNumber: 0 {* fetch lines from line 0 to line 100*}
 }
@@ -41,8 +43,13 @@ const str_favorites = "{'Your favorites'|translate}";
 const str_recent_cats = "{'Recent albums'|translate}";
 const str_recent_pics = "{'Recent photos'|translate}";
 const str_memories = "{'Memories'|translate}";
+const str_no_longer_exist_photo = "{'This photo no longer exists'|@translate}";
+const str_tags = "{'Tags'|translate}";
 const unit_MB = "{"%s MB"|@translate}";
 const str_guest = '{'guest'|@translate}';
+const str_contact_form = '{'Contact Form'|@translate}';
+const str_edit_img = '{'Edit photo'|@translate}';
+
 const guest_id = {$guest_id};
 {/footer_script}
 
@@ -183,7 +190,7 @@ const guest_id = {$guest_id};
       </div>
 
       <div class="type-section">
-        <span class="type-icon"> <i class="icon-file-image"> </i> </span>
+        <a class="type-icon no-img" target="_blank"> <i class="icon-file-image"> </i> </a>
         <span class="icon-ellipsis-vert toggle-img-option">
           <div class="img-option">
             <a class="add-img-as-filter icon-filter"> {'Add as filter'|translate} </a>
@@ -275,6 +282,14 @@ jQuery(document).ready( function() {
 {/literal}{/footer_script}
 
 <style>
+
+.notClickable {
+  opacity: 0.5;
+}
+
+.no-img {
+  cursor: default !important;
+}
 
 .container {
   padding: 0 20px;
@@ -475,6 +490,9 @@ jQuery(document).ready( function() {
   cursor: default;
 
   white-space: nowrap;
+}
+.detail-item::before {
+  margin: 0 5px 0 0px;
 }
 
 .add-filter {

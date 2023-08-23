@@ -176,10 +176,288 @@ if ( empty($page['is_external']) )
 
   if ('search' == $page['section'])
   {
+    include_once(PHPWG_ROOT_PATH.'include/functions_search.inc.php');
+
+    $my_search = get_search_array($page['search']);
+
+    if (isset($my_search['fields']['tags']))
+    {
+      $available_tags = get_available_tags();
+      $available_tag_ids = array();
+
+      if (count($available_tags) > 0)
+      {
+        usort( $available_tags, 'tag_alpha_compare');
+        $template->assign('TAGS', $available_tags);
+
+        foreach ($available_tags as $tag)
+        {
+          $available_tag_ids[] = $tag['id'];
+        }
+      }
+
+      // in case the search has forbidden tags for current user, we need to filter the search rule
+      $my_search['fields']['tags']['words'] = array_intersect($my_search['fields']['tags']['words'], $available_tag_ids);
+    }
+
+    if (isset($my_search['fields']['author']))
+    {
+      $query = '
+SELECT
+    author,
+    COUNT(DISTINCT(id)) AS counter
+  FROM '.IMAGES_TABLE.' AS i
+    JOIN '.IMAGE_CATEGORY_TABLE.' AS ic ON ic.image_id = i.id
+  '.get_sql_condition_FandF(
+    array(
+      'forbidden_categories' => 'category_id',
+      'visible_categories' => 'category_id',
+      'visible_images' => 'id'
+      ),
+    ' WHERE '
+    ).'
+    AND author IS NOT NULL
+  GROUP BY author
+;';
+      $authors = query2array($query);
+      $author_names = array();
+      foreach ($authors as $author)
+      {
+        $author_names[] = $author['author'];
+      }
+      $template->assign('AUTHORS', $authors);
+
+      // in case the search has forbidden authors for current user, we need to filter the search rule
+      $my_search['fields']['author']['words'] = array_intersect($my_search['fields']['author']['words'], $author_names);
+    }
+
+    if (isset($my_search['fields']['date_posted']))
+    {
+      $query = '
+SELECT
+    SUBDATE(NOW(), INTERVAL 7 DAY) AS 7d,
+    SUBDATE(NOW(), INTERVAL 30 DAY) AS 30d,
+    SUBDATE(NOW(), INTERVAL 6 MONTH) AS 6m
+;';
+    $thresholds = query2array($query)[0];
+
+    $query = '
+SELECT
+    image_id,
+    date_available
+  FROM '.IMAGES_TABLE.' AS i
+    JOIN '.IMAGE_CATEGORY_TABLE.' AS ic ON ic.image_id = i.id
+  '.get_sql_condition_FandF(
+    array(
+      'forbidden_categories' => 'category_id',
+      'visible_categories' => 'category_id',
+      'visible_images' => 'id'
+      ),
+    ' WHERE '
+    ).'
+    AND date_available > SUBDATE(NOW(), INTERVAL 1 YEAR)
+;';
+    $dates = query2array($query);
+    $pre_counters = array_fill_keys(array_keys($thresholds), array());
+    foreach ($dates as $date_row)
+    {
+      foreach ($thresholds as $threshold => $date_limit)
+      {
+        if ($date_row['date_available'] > $date_limit)
+        {
+          @$pre_counters[$threshold][ $date_row['image_id'] ] = 1;
+        }
+      }
+      @$pre_counters['1y'][ $date_row['image_id'] ] = 1;
+    }
+
+    // pre_counters need to be deduplicated because a photo can be in several albums
+    $counters = array_fill_keys(array_keys($thresholds), 0);
+    foreach (array_keys($thresholds) as $threshold)
+    {
+      $counters[$threshold] = count(array_keys($pre_counters[$threshold]));
+    }
+    $counters['1y'] = count(array_keys($pre_counters['1y']));
+
+    $template->assign('DATE_POSTED', $counters);
+  }
+
+    if (isset($my_search['fields']['added_by']))
+    {
+      $query = '
+SELECT
+    COUNT(DISTINCT(id)) AS counter,
+    added_by AS added_by_id
+  FROM '.IMAGES_TABLE.' AS i
+    JOIN '.IMAGE_CATEGORY_TABLE.' AS ic ON ic.image_id = i.id
+  '.get_sql_condition_FandF(
+    array(
+      'forbidden_categories' => 'category_id',
+      'visible_categories' => 'category_id',
+      'visible_images' => 'id'
+      ),
+    ' WHERE '
+    ).'
+  GROUP BY added_by_id
+  ORDER BY counter DESC
+;';
+      $added_by = query2array($query);
+
+      if (count($added_by) > 0)
+      {
+        // now let's find the usernames of added_by users
+        $user_ids = array();
+        foreach ($added_by as $i)
+        {
+          $user_ids[] = $i['added_by_id'];
+        }
+
+        $query = '
+SELECT
+    '.$conf['user_fields']['id'].' AS id,
+    '.$conf['user_fields']['username'].' AS username
+  FROM '.USERS_TABLE.'
+  WHERE '.$conf['user_fields']['id'].' IN ('.implode(',', $user_ids).')
+;';
+        $username_of = query2array($query, 'id', 'username');
+
+        foreach (array_keys($added_by) as $added_by_idx)
+        {
+          $added_by[$added_by_idx]['added_by_name'] = $username_of[ $added_by[$added_by_idx]['added_by_id'] ];
+        }
+      }
+
+      $template->assign('ADDED_BY', $added_by);
+
+      // in case the search has forbidden added_by users for current user, we need to filter the search rule
+      $my_search['fields']['added_by'] = array_intersect($my_search['fields']['added_by'], $user_ids);
+    }
+
+    if (isset($my_search['fields']['cat']) and !empty($my_search['fields']['cat']['words']))
+    {
+      $fullname_of = array();
+
+      $query = '
+SELECT
+    id, 
+    uppercats
+  FROM '.CATEGORIES_TABLE.'
+    INNER JOIN '.USER_CACHE_CATEGORIES_TABLE.' ON id = cat_id AND user_id = '.$user['id'].'
+  WHERE id IN ('.implode(',', $my_search['fields']['cat']['words']).')
+;';
+      $result = pwg_query($query);
+
+      while ($row = pwg_db_fetch_assoc($result))
+      {
+        $cat_display_name = get_cat_display_name_cache(
+          $row['uppercats'],
+          'admin.php?page=album-' // TODO not sure it's relevant to link to admin pages
+        );
+        $row['fullname'] = strip_tags($cat_display_name);
+
+        $fullname_of[$row['id']] = $row['fullname'];
+      }
+
+      $template->assign('fullname_of', json_encode($fullname_of));
+
+      // in case the search has forbidden albums for current user, we need to filter the search rule
+      $my_search['fields']['cat']['words'] = array_intersect($my_search['fields']['cat']['words'], array_keys($fullname_of));
+    }
+
+    if (isset($my_search['fields']['filetypes']))
+    {
+      $query = '
+SELECT
+    SUBSTRING_INDEX(path, ".", -1) AS ext,
+    COUNT(DISTINCT(id)) AS counter
+  FROM '.IMAGES_TABLE.' AS i
+    JOIN '.IMAGE_CATEGORY_TABLE.' AS ic ON ic.image_id = i.id
+  '.get_sql_condition_FandF(
+    array(
+      'forbidden_categories' => 'category_id',
+      'visible_categories' => 'category_id',
+      'visible_images' => 'id'
+      ),
+    ' WHERE '
+    ).'
+  GROUP BY ext
+  ORDER BY counter DESC
+;';
+      $template->assign('FILETYPES', query2array($query, 'ext', 'counter'));
+    }
+
     $template->assign(
-      'U_SEARCH_RULES',
-      get_root_url().'search_rules.php?search_id='.$page['search']
-      );
+      array(
+        'GP' => json_encode($my_search),
+        'SEARCH_ID' => $page['search'],
+      )
+    );
+
+    if (0 == $page['start'] and !isset($page['chronology_field']) and isset($page['search_details']))
+    {
+      if (isset($page['search_details']['matching_cat_ids']))
+      {
+        $cat_ids = $page['search_details']['matching_cat_ids'];
+        if (count($cat_ids))
+        {
+          $query = '
+SELECT
+    *
+  FROM '.CATEGORIES_TABLE.'
+  WHERE id IN ('.implode(',', $cat_ids).')
+;';
+          $cats = query2array($query);
+          usort($cats, 'name_compare');
+          $albums_found = array();
+          foreach ($cats as $cat)
+          {
+            $single_link = false;
+            $albums_found[] = get_cat_display_name_cache(
+              $cat['uppercats'],
+              '',
+              $single_link
+            );
+          }
+          $template->assign('ALBUMS_FOUND', $albums_found);
+        }
+      }
+      if (isset($page['search_details']['matching_tags']))
+      {
+        $tags_found = array();
+        foreach ($page['search_details']['matching_tags'] as $tag)
+        {
+          $url = make_index_url(
+            array(
+              'tags' => array($tag)
+            )
+          );
+          $tags_found[] = sprintf('<a href="%s">%s</a>', $url, $tag['name']);
+        }
+        $template->assign('TAGS_FOUND', $tags_found);
+      }
+    }
+  }
+
+  if ('categories' == $page['section'] and isset($page['category']) and !isset($page['combined_categories']))
+  {
+    $template->assign(
+      array(
+        'SEARCH_IN_SET_BUTTON' => $conf['index_search_in_set_button'],
+        'SEARCH_IN_SET_ACTION' => $conf['index_search_in_set_action'],
+        'SEARCH_IN_SET_URL' => get_root_url().'search.php?cat_id='.$page['category']['id'],
+      )
+    );
+  }
+
+  if (isset($page['body_data']['tag_ids']))
+  {
+    $template->assign(
+      array(
+        'SEARCH_IN_SET_BUTTON' => $conf['index_search_in_set_button'],
+        'SEARCH_IN_SET_ACTION' => $conf['index_search_in_set_action'],
+        'SEARCH_IN_SET_URL' => get_root_url().'search.php?tag_id='.implode(',', $page['body_data']['tag_ids']),
+      )
+    );
   }
 
   if (isset($page['category']) and is_admin() and $conf['index_edit_icon'])

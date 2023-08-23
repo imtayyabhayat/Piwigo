@@ -690,6 +690,175 @@ SELECT *
 
 /**
  * API method
+ * Returns a list of elements corresponding to a query search
+ * @param mixed[] $params
+ *    @option string query
+ *    @option int per_page
+ *    @option int page
+ *    @option string order (optional)
+ */
+function ws_images_filteredSearch_update($params, $service)
+{
+  global $user;
+
+  include_once(PHPWG_ROOT_PATH.'include/functions_search.inc.php');
+
+  // * check the search exists
+  if (empty(get_search_id_pattern($params['search_id'])))
+  {
+    return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid search_id input parameter.');
+  }
+
+  $search_info = get_search_info($params['search_id']);
+  if (empty($search_info))
+  {
+    return new PwgError(WS_ERR_INVALID_PARAM, 'This search does not exist.');
+  }
+
+  if (!empty($search_info['created_by']) and $search_info['created_by'] != $user['user_id'])
+  {
+    return new PwgError(WS_ERR_INVALID_PARAM, 'This search was created by another user.');
+  }
+
+  $search = array('mode' => 'AND');
+
+  // * check all parameters
+  if (isset($params['allwords']))
+  {
+    $search['fields']['allwords'] = array();
+
+    if (!isset($params['allwords_mode']))
+    {
+      $params['allwords_mode'] = 'AND';
+    }
+    if (!preg_match('/^(OR|AND)$/', $params['allwords_mode']))
+    {
+      return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter allwords_mode');
+    }
+    $search['fields']['allwords']['mode'] = $params['allwords_mode'];
+
+    $allwords_fields_available = array('name', 'comment', 'file', 'tags', 'cat-title', 'cat-desc');
+    if (!isset($params['allwords_fields']))
+    {
+      $params['allwords_fields'] = $allwords_fields_available;
+    }
+    foreach ($params['allwords_fields'] as $field)
+    {
+      if (!in_array($field, $allwords_fields_available))
+      {
+        return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter allwords_fields');
+      }
+    }
+    $search['fields']['allwords']['fields'] = $params['allwords_fields'];
+
+    $search['fields']['allwords']['words'] = split_allwords($params['allwords']);
+  }
+
+  if (isset($params['tags']))
+  {
+    foreach ($params['tags'] as $tag_id)
+    {
+      if (!preg_match('/^\d+$/', $tag_id))
+      {
+        return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter tags');
+      }
+    }
+
+    if (!isset($params['tags_mode']))
+    {
+      $params['tags_mode'] = 'AND';
+    }
+    if (!preg_match('/^(OR|AND)$/', $params['tags_mode']))
+    {
+      return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter tags_mode');
+    }
+
+    $search['fields']['tags'] = array(
+      'words' => $params['tags'],
+      'mode'  => $params['tags_mode'],
+    );
+  }
+
+  if (isset($params['categories']))
+  {
+    foreach ($params['categories'] as $cat_id)
+    {
+      if (!preg_match('/^\d+$/', $cat_id))
+      {
+        return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter categories');
+      }
+    }
+
+    $search['fields']['cat'] = array(
+      'words'   => $params['categories'],
+      'sub_inc' => $params['categories_withsubs'] ?? false,
+    );
+  }
+
+  if (isset($params['authors']))
+  {
+    $authors = array();
+
+    foreach ($params['authors'] as $author)
+    {
+      $authors[] = strip_tags($author);
+    }
+
+    $search['fields']['author'] = array(
+      'words' => $authors,
+      'mode' => 'OR',
+    );
+  }
+
+  if (isset($params['filetypes']))
+  {
+    foreach ($params['filetypes'] as $ext)
+    {
+      if (!preg_match('/^[a-z0-9]+$/i', $ext))
+      {
+        return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter filetypes');
+      }
+    }
+
+    $search['fields']['filetypes'] = $params['filetypes'];
+  }
+
+  if (isset($params['added_by']))
+  {
+    foreach ($params['added_by'] as $user_id)
+    {
+      if (!preg_match('/^\d+$/', $user_id))
+      {
+        return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter added_by');
+      }
+    }
+
+    $search['fields']['added_by'] = $params['added_by'];
+  }
+
+  if (isset($params['date_posted']))
+  {
+    if (!preg_match('/^(7d|30d|6m|1y|)$/', $params['date_posted']))
+    {
+      return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid parameter date_posted');
+    }
+
+    $search['fields']['date_posted'] = $params['date_posted'];
+  }
+
+  // register search rules in database, then they will be available on
+  // thumbnails page and picture page.
+  $query ='
+UPDATE '.SEARCH_TABLE.'
+  SET rules = \''.pwg_db_real_escape_string(serialize($search)).'\'
+    , last_seen = NOW()
+  WHERE id = '.$search_info['id'].'
+;';
+  pwg_query($query);
+}
+
+/**
+ * API method
  * Sets the level of an image
  * @param mixed[] $params
  *    @option int image_id
@@ -1803,7 +1972,7 @@ function ws_images_exist($params, $service)
     // search among photos the list of photos already added, based on md5sum list
     $md5sums = preg_split(
       $split_pattern,
-      $params['md5sum_list'],
+      (string) $params['md5sum_list'],
       -1,
       PREG_SPLIT_NO_EMPTY
     );

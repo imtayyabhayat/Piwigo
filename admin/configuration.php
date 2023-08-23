@@ -43,7 +43,6 @@ $main_checkboxes = array(
     'obligatory_user_mail_address',
     'rate',
     'rate_anonymous',
-    'email_admin_on_new_user',
     'allow_user_customization',
     'log',
     'history_admin',
@@ -73,6 +72,8 @@ $comments_checkboxes = array(
 
 $display_checkboxes = array(
     'menubar_filter_icon',
+    'index_search_in_set_button',
+    'index_search_in_set_action',
     'index_sort_order_input',
     'index_flat_icon',
     'index_posted_date_icon',
@@ -199,6 +200,26 @@ if (isset($_POST['submit']))
         }
       }
 
+      if (empty($_POST['email_admin_on_new_user']))
+      {
+        $_POST['email_admin_on_new_user'] = 'none';
+      }
+      elseif ('all' == $_POST['email_admin_on_new_user_filter'])
+      {
+        $_POST['email_admin_on_new_user'] = 'all';
+      }
+      else
+      {
+        if (empty($_POST['email_admin_on_new_user_filter_group']))
+        {
+          $_POST['email_admin_on_new_user'] = 'all';
+        }
+        else
+        {
+          $_POST['email_admin_on_new_user'] = 'group:'.$_POST['email_admin_on_new_user_filter_group'];
+        }
+      }
+
       foreach( $main_checkboxes as $checkbox)
       {
         $_POST[$checkbox] = empty($_POST[$checkbox])?'false':'true';
@@ -284,7 +305,8 @@ WHERE param = \''.$row['param'].'\'
         pwg_query($query);
       }
     }
-    $page['infos'][] = l10n('Information data registered in database');
+    $page['infos'][] = l10n('Your configuration settings are saved');
+    pwg_activity('system', ACTIVITY_SYSTEM_CORE, 'config', array('config_section'=>$page['section']));
   }
 
   //------------------------------------------------------ $conf reinitialization
@@ -299,6 +321,7 @@ if ('sizes' == $page['section'] and isset($_GET['action']) and 'restore_settings
   clear_derivative_cache();
 
   $page['infos'][] = l10n('Your configuration settings are saved');
+  pwg_activity('system', ACTIVITY_SYSTEM_CORE, 'config', array('config_section'=>$page['section'],'config_action'=>$_GET['action']));
 }
 
 //----------------------------------------------------- template initialization
@@ -327,6 +350,8 @@ switch ($page['section'])
 
     function order_by_is_local()
     {
+      $conf = array();
+      include(PHPWG_ROOT_PATH . 'include/config_default.inc.php');
       @include(PHPWG_ROOT_PATH. 'local/config/config.inc.php');
       if (isset($conf['local_dir_site']))
       {
@@ -368,6 +393,25 @@ switch ($page['section'])
         'mail_theme_options' => $mail_themes,
         'order_by' => $order_by,
         'order_by_options' => $sort_fields,
+        'email_admin_on_new_user' => 'none' != $conf['email_admin_on_new_user'],
+        'email_admin_on_new_user_filter' => in_array($conf['email_admin_on_new_user'], array('none', 'all')) ? 'all' : 'group',
+        'email_admin_on_new_user_filter_group' => preg_match('/^group:(\d+)$/', $conf['email_admin_on_new_user'], $matches) ? $matches[1] : -1,
+        )
+      );
+
+    // list of groups
+    $query = '
+    SELECT
+        id,
+        name
+      FROM '.GROUPS_TABLE.'
+    ;';
+    $groups = query2array($query, 'id', 'name');
+    natcasesort($groups);
+
+    $template->assign(
+      array(
+        'group_options' => $groups,
         )
       );
 

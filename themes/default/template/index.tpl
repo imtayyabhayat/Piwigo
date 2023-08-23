@@ -1,6 +1,9 @@
 {combine_script id='core.switchbox' load='async' require='jquery' path='themes/default/js/switchbox.js'}
-{$MENUBAR}
+{combine_script id='jquery.selectize' load='footer' path='themes/default/js/plugins/selectize.min.js'}
+{combine_css path="admin/themes/default/fontello/css/animation.css" order=10} {* order 10 is required, see issue 1080 *}
+{combine_script id='jquery.tipTip' load='header' path='themes/default/js/plugins/jquery.tipTip.minified.js'}
 
+{$MENUBAR}
 
 {if isset($errors) or isset($infos)}
 <div class="content messages{if isset($MENUBAR)} contentWithMenu{/if}">
@@ -12,6 +15,11 @@
 <div id="content" class="content{if isset($MENUBAR)} contentWithMenu{/if}">
 <div class="titrePage{if isset($chronology.TITLE)} calendarTitleBar{/if}">
 	<ul class="categoryActions">
+{if isset($SEARCH_IN_SET_ACTION) and $SEARCH_IN_SET_ACTION}
+    <li id="cmdSearchInSet"><a href="{$SEARCH_IN_SET_URL}" title="{'Search in this set'|translate}" class="pwg-state-default pwg-button">
+      <span class="pwg-icon pwg-icon-search-folder"></span><span class="pwg-button-text">{'Search in this set'|translate}</span>
+    </a></li>
+{/if}
 {if !empty($image_orders)}
 		<li>{strip}<a id="sortOrderLink" title="{'Sort order'|@translate}" class="pwg-state-default pwg-button" rel="nofollow">
 			<span class="pwg-icon pwg-icon-sort"></span><span class="pwg-button-text">{'Sort order'|@translate}</span>
@@ -60,12 +68,6 @@
 {if isset($U_EDIT)}
 		<li id="cmdEditAlbum"><a href="{$U_EDIT}" title="{'Edit album'|@translate}" class="pwg-state-default pwg-button">
 			<span class="pwg-icon pwg-icon-category-edit"></span><span class="pwg-button-text">{'Edit'|@translate}</span>
-		</a></li>
-{/if}
-{if isset($U_SEARCH_RULES)}
-		{combine_script id='core.scripts' load='async' path='themes/default/js/scripts.js'}
-		<li><a href="{$U_SEARCH_RULES}" onclick="popuphelp(this.href); return false;" title="{'Search rules'|@translate}" class="pwg-state-default pwg-button" rel="nofollow">
-			<span class="pwg-icon pwg-icon-help"></span><span class="pwg-button-text">(?)</span>
 		</a></li>
 {/if}
 {if isset($U_SLIDESHOW)}
@@ -157,6 +159,14 @@
 {include file=$FILE_CHRONOLOGY_VIEW}
 {/if}
 
+{if isset($SEARCH_IN_SET_BUTTON) and $SEARCH_IN_SET_BUTTON}
+<div class="mcs-side-results search-in-set-button">
+  <div>
+    <p><a href="{$SEARCH_IN_SET_URL}" class="pwg-icon-search-folder">{'Search in this set'|translate}</a></p>
+  </div>
+</div>
+{/if}
+
 {if !empty($CONTENT_DESCRIPTION)}
 <div class="additional_info">
 	{$CONTENT_DESCRIPTION}
@@ -171,11 +181,24 @@
 	{include file='navigation_bar.tpl'|@get_extent:'navbar' navbar=$cats_navbar}
 {/if}
 
+{if !empty($SEARCH_ID)}
+  {include file='themes/default/template/include/search_filters.inc.tpl'}
+{/if}
+
 {if !empty($THUMBNAILS)}
 <div class="loader"><img src="{$ROOT_URL}{$themeconf.img_dir}/ajax_loader.gif"></div>
+
 <ul class="thumbnails" id="thumbnails">
   {$THUMBNAILS}
 </ul>
+
+{else if !empty($SEARCH_ID)}
+<div class="mcs-no-result">
+  <div class="text">
+    <span class="top">{'No results are available.'|@translate}</span>
+    <span class="bot">{'You can try to edit your filters and perform a new search.'|translate}</span>
+  </div>
+</div>
 {/if}
 {if !empty($thumb_navbar)}
 	{include file='navigation_bar.tpl'|@get_extent:'navbar' navbar=$thumb_navbar}

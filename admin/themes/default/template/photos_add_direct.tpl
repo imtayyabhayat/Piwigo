@@ -392,25 +392,44 @@ jQuery(document).ready(function(){
 
 <div id="photosAddContent">
 
+{if count($setup_errors) > 0}
+  <div class="errors">
+    <ul>
+    {foreach from=$setup_errors item=error}
+      <li>{$error}</li>
+    {/foreach}
+    </ul>
+  </div>
+  {else}
+    {if count($setup_warnings) > 0}
+  <div class="warnings">
+    <ul>
+      {foreach from=$setup_warnings item=warning}
+      <li>{$warning}</li>
+      {/foreach}
+    </ul>
+    <div class="hideButton" style="text-align:center"><a href="{$hide_warnings_link}">{'Hide'|@translate}</a></div>
+  </div>
+    {/if}
+  {/if} {* $setup_errors *}
+  
   {if $PROMOTE_MOBILE_APPS}
     <div class="promote-apps">
       <div class="promote-content">
         <div class="left-side">
-        <img src="https://de.piwigo.org/./plugins/piwigo-piwigodotorg/images/mobile_applications/Group_77.png">
-          <div class="promote-text">
-            <span>{"Piwigo is also on mobile."|@translate|escape:javascript}</span>
-            <span>{"Try now !"|@translate|escape:javascript}</span>
-          </div>
+          <img src="https://sandbox.piwigo.com/uploads/4/y/1/4y1zzhnrnw//2023/01/24/20230124175152-015bc1e3.png">
         </div>
-        <div class="mid-side"></div>
+        <div class="promote-text">
+          <span>{"Piwigo is also on mobile."|@translate|escape:javascript}</span>
+          <span>{"Try now !"|@translate|escape:javascript}</span>
+        </div>
         <div class="right-side">
-          <div class="promote-text">
-            <span>{"Install Piwigo on mobile"|@translate|escape:javascript}</span>
-            <a href="https://piwigo.org/mobile-applications" target="_blank"><span class="go-to-porg icon-link-1">{"Discover"|@translate|escape:javascript}</span></a>
+          <div>
+            <a href="{$PHPWG_URL}/mobile-applications" target="_blank"><span class="go-to-porg icon-link-1">{"Discover"|@translate|escape:javascript}</span></a>
           </div>
         </div>
       </div>
-      <span class="dont-show-again">{'Understood, do not show again'|translate|escape:javascript}</span>
+      <span class="dont-show-again icon-cancel tiptip" title="{'Understood, do not show again'|translate|escape:javascript}"></span>
     </div>
   {/if}
 
@@ -444,26 +463,6 @@ jQuery(document).ready(function(){
     <a href="admin.php?page=photos_add&formats" class="icon-plus-circled">{'Add another set of formats'|@translate}</a>
   {/if}
 </p>
-
-{if count($setup_errors) > 0}
-<div class="errors">
-  <ul>
-  {foreach from=$setup_errors item=error}
-    <li>{$error}</li>
-  {/foreach}
-  </ul>
-</div>
-{else}
-  {if count($setup_warnings) > 0}
-<div class="warnings">
-  <ul>
-    {foreach from=$setup_warnings item=warning}
-    <li>{$warning}</li>
-    {/foreach}
-  </ul>
-  <div class="hideButton" style="text-align:center"><a href="{$hide_warnings_link}">{'Hide'|@translate}</a></div>
-</div>
-  {/if}
 
   <form id="uploadForm" class="{if $DISPLAY_FORMATS}format-mode{/if}" enctype="multipart/form-data" method="post" action="{$form_action}"{if $NB_ALBUMS == 0} style="display:none;"{/if}>
     {if not $DISPLAY_FORMATS}
@@ -548,7 +547,5 @@ jQuery(document).ready(function(){
   <fieldset style="display:none" class="Addedphotos">
     <div id="uploadedPhotos"></div>
   </fieldset>
-
-{/if} {* $setup_errors *}
 
 </div> <!-- photosAddContent -->

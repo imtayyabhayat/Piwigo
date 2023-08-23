@@ -389,6 +389,7 @@ function ws_session_getStatus($params, &$service)
   list($dbnow) = pwg_db_fetch_row(pwg_query('SELECT NOW();'));
   $res['current_datetime'] = $dbnow;
   $res['version'] = PHPWG_VERSION;
+  $res['save_visits'] = do_log();
 
   // Piwigo Remote Sync does not support receiving the available sizes
   $piwigo_remote_sync_agent = 'Apache-HttpClient/';
@@ -434,8 +435,7 @@ function ws_getActivityList($param, &$service)
 
   $user_ids = array();
 
-  if (isset($param['uid'])) {
-    $query = '
+  $query = '
 SELECT
     activity_id,
     performed_by,
@@ -448,28 +448,29 @@ SELECT
     details,
     user_agent
   FROM '.ACTIVITY_TABLE.'
-  WHERE performed_by = '.$param['uid'].'
-  ORDER BY activity_id DESC LIMIT '.$page_size.' OFFSET '.$page_offset.';
-;';
-  } 
-  else 
+  WHERE object != \'system\'';
+
+  if (isset($param['uid']))
   {
-    $query = '
-SELECT
-    activity_id,
-    performed_by,
-    object,
-    object_id,
-    action,
-    session_idx,
-    ip_address,
-    occured_on,
-    details,
-    user_agent
-  FROM '.ACTIVITY_TABLE.'
-  ORDER BY activity_id DESC LIMIT '.$page_size.' OFFSET '.$page_offset.';
-;';
+    $query.= '
+    AND performed_by = '.$param['uid'];
   }
+  elseif ('none' == $conf['activity_display_connections'])
+  {
+    $query.= '
+    AND action NOT IN (\'login\', \'logout\')';
+  }
+  elseif ('admins_only' == $conf['activity_display_connections'])
+  {
+    include_once(PHPWG_ROOT_PATH.'admin/include/functions.php');
+    $query.= '
+    AND NOT (action IN (\'login\', \'logout\') AND object_id NOT IN ('.implode(',', get_admins()).'))';
+  }
+
+  $query.= '
+  ORDER BY activity_id DESC
+  LIMIT '.$page_size.' OFFSET '.$page_offset.'
+;';
 
   $line_id = 0;
   $result = pwg_query($query);
@@ -519,7 +520,12 @@ SELECT
         'counter' => 1, 
       );
 
-      @$user_ids[ $row['performed_by'] ]++;
+      $user_ids[ $row['performed_by'] ] = 1;
+      if ('user' == $row['object'])
+      {
+        $user_ids[ $row['object_id'] ] = 1;
+      }
+
       $current_key = $line_key;
       $line_id++;
     }
@@ -609,7 +615,21 @@ function ws_history_log($params, &$service)
     $page['tag_ids'] = explode(',', $params['tags_string']);
   }
 
-  pwg_log($params['image_id'], 'picture');
+  // when visiting a photo (which is currently, in version 14, the only event registered
+  // by pwg.history.log) we should also increment images.hit
+  if (!empty($params['image_id']))
+  {
+    include_once(PHPWG_ROOT_PATH.'include/functions_picture.inc.php');
+    increase_image_visit_counter($params['image_id']);
+  }
+
+  $image_type = 'picture';
+  if ($params['is_download'])
+  {
+    $image_type = 'high';
+  }
+
+  pwg_log($params['image_id'], $image_type);
 }
 
 /**
@@ -674,7 +694,7 @@ function ws_history_search($param, &$service)
   }
 
   // user
-  $search['fields']['user'] = intval($param['user']);
+  $search['fields']['user'] = intval($param['user_id']);
 
   // image
   if (!empty($param['image_id']))
@@ -822,13 +842,21 @@ SELECT id, uppercats
 ;';
     $uppercats_of = query2array($query, 'id', 'uppercats');
 
+    $full_cat_path = array();
     $name_of_category = array();
 
     foreach ($uppercats_of as $category_id => $uppercats)
     {
+      $full_cat_path[$category_id] = get_cat_display_name_cache(
+        $uppercats,
+        'admin.php?page=album-'
+      );
+      
+      $uppercats = explode(",", $uppercats);
       $name_of_category[$category_id] = get_cat_display_name_cache(
-        $uppercats
-        );
+        end($uppercats),
+        'admin.php?page=album-'
+      );
     }
   }
 
@@ -894,7 +922,7 @@ SELECT
 
     $i++;
 
-    if ($i < $first_line or $i > $last_line)
+    if ($i <= $first_line and $i >= $last_line)
     {
       continue;
     }
@@ -964,6 +992,7 @@ SELECT
       }
       else
       {
+        $image_edit_string = '';
         $image_title.= ' unknown filename';
       }
 
@@ -992,6 +1021,7 @@ SELECT
         'EDIT_IMAGE' => $image_edit_string,
         'TYPE'       => $line['image_type'],
         'SECTION'    => $line['section'],
+        'FULL_CATEGORY_PATH'   => isset($full_cat_path[$line['category_id']]) ? strip_tags($full_cat_path[$line['category_id']]) : l10n('Root').$line['category_id'],
         'CATEGORY'   => isset($name_of_category[$line['category_id']]) ? $name_of_category[$line['category_id']] : l10n('Root').$line['category_id'],
         'TAGS'       => explode(",",$tag_names),
         'TAGIDS'     => explode(",",$tag_ids),
